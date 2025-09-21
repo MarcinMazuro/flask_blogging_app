@@ -4,6 +4,7 @@
 {% block page_content %}
 <div class="page-header">
     <h1>Hello {% if name %}{{name}}{% else %}World!{% endif %}</h1>
+    <h2>{% if known %}Nice to see you again.{% else %}Welcome for the first time.{% endif %}</h2>
     <p>Current time is {{ moment(current_time).format('LLLL') }}.</p>
     <p>That was {{ moment(current_time).fromNow(refresh=True) }}.</p>
 </div>
