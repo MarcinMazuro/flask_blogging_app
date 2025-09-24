@@ -1,8 +1,10 @@
 from flask import current_app
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_login import UserMixin, AnnonymousUserMixin
-from itsdangerous import URLSafeTimedSerializer as Serializer
+from flask_login import UserMixin, AnonymousUserMixin
 from . import db, login_manager
+import datetime
+import jwt
+from jwt import ExpiredSignatureError, InvalidTokenError
 
 
 class Permission:
@@ -99,28 +101,29 @@ class User(UserMixin, db.Model):
     def verify_password(self, password):
         return check_password_hash(self.password_hash, password)
 
-    def generate_confirmation_token(self, max_age=3600):
-        s = Serializer(current_app.config['SECRET_KEY'], salt='confirm')
-        return s.dumps({'confirm': self.id})
+    def generate_confirmation_token(self, expiration=3600):
+        payload = {
+            'confirm': self.id,
+            'exp': datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(seconds=expiration)
+        }
+        token = jwt.encode(payload, current_app.config['SECRET_KEY'], algorithm='HS256')
+        # PyJWT 2.x zwraca string; dla kompatybilności z wcześniejszymi wersjami można wymusić .decode()
+        if isinstance(token, bytes):
+            token = token.decode('utf-8')
+        return token
 
-    def confirm(self, token, max_age=3600):
-        s = Serializer(current_app.config['SECRET_KEY'], salt='confirm')
+    def confirm(self, token):
         try:
-            # W nowszych wersjach itsdangerous, token może już być stringiem
-            # więc spróbujmy najpierw bez encode
-            try:
-                data = s.loads(token, max_age=max_age)
-            except:
-                # Jeśli to nie zadziała, spróbujmy z encode - dla kompatybilności
-                data = s.loads(token.encode('utf-8'), max_age=max_age)
-        except Exception as e:
-            print(f"Error confirming token: {e}")
-            return False
+            data = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
+        except ExpiredSignatureError:
+            return False  # token wygasł
+        except InvalidTokenError:
+            return False  # nieprawidłowy token / sygnatura
         if data.get('confirm') != self.id:
             return False
         self.confirmed = True
         db.session.add(self)
-        db.session.commit()  # Dodano commit aby zapisać zmiany
+        db.session.commit()
         return True
     
     def can(self, perm):
@@ -133,7 +136,7 @@ class User(UserMixin, db.Model):
         return f'<User {self.username}>'
     
 
-class AnonymousUser(AnnonymousUserMixin):
+class AnonymousUser(AnonymousUserMixin):
     def can(self, permissions):
         return False
 
