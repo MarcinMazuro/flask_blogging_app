@@ -2,7 +2,7 @@ import unittest
 import time
 from app import create_app, db
 from app.models import Follow, User, AnonymousUser, Role, Permission
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import timezone
 
 
@@ -104,6 +104,22 @@ class UserModelTestCase(unittest.TestCase):
         self.assertFalse(u.can(Permission.MODERATE))
         self.assertFalse(u.can(Permission.ADMIN))
 
+    def to_utc(self, dt):
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+
+    def test_timestamps(self):
+        u = User(password='cat')
+        db.session.add(u)
+        db.session.commit()
+
+        now = datetime.now(timezone.utc)
+
+        self.assertTrue((now - self.to_utc(u.member_since)).total_seconds() < 3)
+        self.assertTrue((now - self.to_utc(u.last_seen)).total_seconds() < 3)
+
+
     def test_ping(self):
         u = User(password='cat')
         db.session.add(u)
@@ -125,3 +141,41 @@ class UserModelTestCase(unittest.TestCase):
         self.assertTrue('s=256' in gravatar_256)
         self.assertTrue('r=pg' in gravatar_pg)
         self.assertTrue('d=retro' in gravatar_retro)
+
+    def test_follows(self):
+        u1 = User(email='john@example.com', password='cat')
+        u2 = User(email='susan@example.org', password='dog')
+        db.session.add(u1)
+        db.session.add(u2)
+        db.session.commit()
+        self.assertFalse(u1.is_following(u2))
+        self.assertFalse(u1.is_followed_by(u2))
+        timestamp_before = datetime.now(timezone.utc)
+        u1.follow(u2)
+        db.session.add(u1)
+        db.session.commit()
+        timestamp_after = datetime.now(timezone.utc)
+        self.assertTrue(u1.is_following(u2))
+        self.assertFalse(u1.is_followed_by(u2))
+        self.assertTrue(u2.is_followed_by(u1))
+        self.assertTrue(u1.followed.count() == 1)
+        self.assertTrue(u2.followers.count() == 1)
+        f = u1.followed.all()[-1]
+        self.assertTrue(f.followed == u2)
+        self.assertTrue(timestamp_before <= self.to_utc(f.timestamp) <= timestamp_after)
+        f = u2.followers.all()[-1]
+        self.assertTrue(f.follower == u1)
+        u1.unfollow(u2)
+        db.session.add(u1)
+        db.session.commit()
+        self.assertTrue(u1.followed.count() == 0)
+        self.assertTrue(u2.followers.count() == 0)
+        self.assertTrue(Follow.query.count() == 0)
+        u2.follow(u1)
+        db.session.add(u1)
+        db.session.add(u2)
+        db.session.commit()
+        db.session.delete(u2)
+        db.session.commit()
+        self.assertTrue(Follow.query.count() == 0)
+        

@@ -107,7 +107,7 @@ class Follow(db.Model):
                             primary_key=True)
     followed_id = db.Column(db.Integer, db.ForeignKey('users.id'),
                             primary_key=True)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class User(UserMixin, db.Model):
@@ -121,8 +121,8 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(64))
     location = db.Column(db.String(64))
     about_me = db.Column(db.Text())
-    member_since = db.Column(db.DateTime(), default=datetime.now(timezone.utc))
-    last_seen = db.Column(db.DateTime(), default=datetime.now(timezone.utc))
+    member_since = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    last_seen = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     avatar_hash = db.Column(db.String(32))
     posts = db.relationship('Post', backref='author', lazy='dynamic')
     followed = db.relationship('Follow',
