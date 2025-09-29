@@ -46,7 +46,6 @@ def confirm(token):
     if current_user.confirmed:
         return redirect(url_for('main.index'))
     if current_user.confirm(token):
-        db.session.commit()  # Dodane commit aby zapewnić zapisanie zmian w bazie
         flash('You have confirmed your account. Thanks!')
     else:
         flash('The confirmation link is invalid or has expired.')
@@ -54,12 +53,11 @@ def confirm(token):
 
 @auth.before_app_request
 def before_request():
-    if current_user.is_authenticated:
-        current_user.ping()  # Aktualizacja last_seen przy każdej autoryzowane
-        if not current_user.confirmed \
+    if current_user.is_authenticated \
+            and not current_user.confirmed \
             and request.blueprint != 'auth' \
             and request.endpoint != 'static':
-            return redirect(url_for('auth.unconfirmed'))
+        return redirect(url_for('auth.unconfirmed'))
     
 @auth.route('/unconfirmed')
 def unconfirmed():
